@@ -205,7 +205,6 @@ func createTables() {
 		`CREATE INDEX IF NOT EXISTS idx_activity_log_user_id ON activity_log(user_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id)`,
 	}
-
 	for _, q := range queries {
 		if _, err := DB.Exec(q); err != nil {
 			log.Printf("⚠️  %v", err)
