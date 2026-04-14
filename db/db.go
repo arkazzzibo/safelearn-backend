@@ -14,12 +14,12 @@ var DB *sql.DB
 func Connect(cfg *config.Config) {
 	var dsn string
 
-	// Railway даёт DATABASE_URL — используем его если есть
 	if cfg.DatabaseURL != "" {
+		// Railway даёт готовый URL — используем напрямую
 		dsn = cfg.DatabaseURL
 		log.Println("🔗 Используем DATABASE_URL (Railway)")
 	} else {
-		// Локальная разработка — собираем DSN из отдельных переменных
+		// Локальная разработка
 		dsn = fmt.Sprintf(
 			"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
 			cfg.DBHost, cfg.DBPort, cfg.DBUser, cfg.DBPassword, cfg.DBName,
@@ -198,7 +198,6 @@ func createTables() {
 			created_at TIMESTAMP DEFAULT NOW()
 		)`,
 
-		// Индексы
 		`CREATE INDEX IF NOT EXISTS idx_lessons_course_id ON lessons(course_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_lesson_blocks_lesson_id ON lesson_blocks(lesson_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_user_progress_user_id ON user_progress(user_id)`,
@@ -209,7 +208,7 @@ func createTables() {
 
 	for _, q := range queries {
 		if _, err := DB.Exec(q); err != nil {
-			log.Printf("⚠️  Ошибка выполнения запроса: %v", err)
+			log.Printf("⚠️  %v", err)
 		}
 	}
 
