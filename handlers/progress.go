@@ -46,26 +46,39 @@ func CompleteLesson(c *gin.Context) {
 	})
 
 	// Проверяем завершение курса
-	var total, done int
-	db.DB.QueryRow("SELECT COUNT(*) FROM lessons WHERE course_id=$1", courseID).Scan(&total)
+	// total — все уроки курса
+	var total int
+	db.DB.QueryRow(
+		"SELECT COUNT(*) FROM lessons WHERE course_id=$1", courseID,
+	).Scan(&total)
+
+	// done — уроки курса которые студент прошёл (через JOIN чтобы не считать уроки других курсов)
+	var done int
 	db.DB.QueryRow(`
-		SELECT COUNT(*) FROM user_progress up
+		SELECT COUNT(DISTINCT up.lesson_id)
+		FROM user_progress up
 		JOIN lessons l ON l.id = up.lesson_id
-		WHERE up.user_id=$1 AND l.course_id=$2 AND up.done=true
+		WHERE up.user_id = $1
+		  AND l.course_id = $2
+		  AND up.done = true
 	`, userID, courseID).Scan(&done)
 
 	courseDone := total > 0 && done >= total
+
 	if courseDone {
+		// Проставляем completed_at только если ещё не проставлено
 		db.DB.Exec(`
-			UPDATE course_enrollments SET completed_at=NOW()
-			WHERE user_id=$1 AND course_id=$2 AND completed_at IS NULL
+			UPDATE course_enrollments
+			SET completed_at = NOW()
+			WHERE user_id = $1
+			  AND course_id = $2
+			  AND completed_at IS NULL
 		`, userID, courseID)
 
 		LogActivity(userID.(int), "course_completed", "course", courseID, map[string]string{
 			"course_title": courseTitle,
 		})
 
-		// Уведомление о завершении курса
 		CreateNotification(userID.(int), "course_completed",
 			"Курс завершён: "+courseTitle,
 			"Поздравляем! Ты прошёл курс полностью.")
@@ -88,13 +101,18 @@ func GetProgress(c *gin.Context) {
 		return
 	}
 
+	// Возвращаем прогресс по всем урокам курса (включая непройденные — с done=false)
 	rows, err := db.DB.Query(`
-		SELECT up.lesson_id, up.done,
-		       COALESCE(up.time_spent, 0),
-		       COALESCE(to_char(up.done_at, 'YYYY-MM-DD HH24:MI'), '') as done_at
-		FROM user_progress up
-		JOIN lessons l ON l.id = up.lesson_id
-		WHERE up.user_id=$1 AND l.course_id=$2
+		SELECT
+			l.id as lesson_id,
+			COALESCE(up.done, false) as done,
+			COALESCE(up.time_spent, 0) as time_spent,
+			COALESCE(to_char(up.done_at, 'YYYY-MM-DD HH24:MI'), '') as done_at
+		FROM lessons l
+		LEFT JOIN user_progress up
+			ON up.lesson_id = l.id AND up.user_id = $1
+		WHERE l.course_id = $2
+		ORDER BY l.ord
 	`, userID, courseID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения прогресса"})

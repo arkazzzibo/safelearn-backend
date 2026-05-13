@@ -34,74 +34,67 @@ func main() {
 		c.Next()
 	})
 
-	// Healthcheck
 	r.GET("/ping", func(c *gin.Context) {
 		c.JSON(200, gin.H{"message": "SafeLearn API ✅", "version": "2.0"})
 	})
 
-	// ── Авторизация (публичные) ──────────────────────────────────────
+	// Авторизация
 	auth := r.Group("/api/auth")
 	{
 		auth.POST("/register", handlers.Register)
 		auth.POST("/login", handlers.Login)
 	}
 
-	// ── Курсы (публичные) ────────────────────────────────────────────
+	// Публичные курсы
 	r.GET("/api/courses", handlers.GetCourses)
 	r.GET("/api/courses/:id", handlers.GetCourse)
 	r.GET("/api/courses/:id/lessons", handlers.GetLessons)
 	r.GET("/api/lessons/:lesson_id/blocks", handlers.GetBlocks)
 	r.GET("/api/search", handlers.SearchCourses)
 
-	// ── Защищённые маршруты ──────────────────────────────────────────
+	// Защищённые маршруты
 	api := r.Group("/api")
 	api.Use(middleware.AuthRequired())
 	{
-		// Профиль
 		api.GET("/me", handlers.Me)
 		api.GET("/profile", handlers.GetProfile)
 
-		// Запись на курс
 		api.POST("/courses/:id/enroll", handlers.EnrollCourse)
 		api.GET("/courses/:id/enrolled", handlers.IsEnrolled)
 		api.GET("/enrolled", handlers.GetEnrolledCourses)
 
-		// Прогресс
 		api.POST("/lessons/:lesson_id/complete", handlers.CompleteLesson)
 		api.GET("/progress/:course_id", handlers.GetProgress)
 
-		// Результаты тестов
 		api.POST("/results", handlers.SaveResult)
 		api.GET("/results", handlers.GetMyResults)
 		api.POST("/phishing-attempts", handlers.SavePhishingAttempt)
 
-		// Компетенции
 		api.GET("/competencies", handlers.GetCompetencies)
-
-		// Активность
 		api.GET("/activity", handlers.GetActivity)
 
-		// Уведомления
 		api.GET("/notifications", handlers.GetNotifications)
 		api.PUT("/notifications/:id/read", handlers.MarkNotificationRead)
 		api.PUT("/notifications/read-all", handlers.MarkAllNotificationsRead)
 
-		// ── Преподаватель ────────────────────────────────────────────
+		// Преподаватель
 		teacher := api.Group("/teacher")
 		teacher.Use(middleware.TeacherRequired())
 		{
-			// Курсы
 			teacher.GET("/courses", handlers.GetMyCourses)
 			teacher.POST("/courses", handlers.CreateCourse)
 			teacher.PUT("/courses/:id", handlers.UpdateCourse)
 
-			// Уроки
+			teacher.GET("/courses/:course_id/stats", handlers.GetCourseStats)
+
 			teacher.POST("/courses/:course_id/lessons", handlers.CreateLesson)
 			teacher.PUT("/lessons/:lesson_id", handlers.UpdateLesson)
 			teacher.DELETE("/lessons/:lesson_id", handlers.DeleteLesson)
 
-			// Блоки
+			// Один блок (create/update по id)
 			teacher.POST("/lessons/:lesson_id/blocks", handlers.SaveBlock)
+			// Заменить все блоки урока разом — используется при сохранении курса
+			teacher.POST("/lessons/:lesson_id/blocks/replace", handlers.SaveBlocks)
 			teacher.DELETE("/blocks/:block_id", handlers.DeleteBlock)
 		}
 	}

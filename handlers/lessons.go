@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log"
 	"net/http"
 	"safelearn-backend/db"
 	"safelearn-backend/models"
@@ -59,6 +60,7 @@ func CreateLesson(c *gin.Context) {
 	`, lesson.CourseID, lesson.Title, lesson.Type, lesson.Order, lesson.DurationMinutes,
 	).Scan(&lesson.ID)
 	if err != nil {
+		log.Printf("CreateLesson error: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка создания урока"})
 		return
 	}
@@ -141,6 +143,7 @@ func GetBlocks(c *gin.Context) {
 	c.JSON(http.StatusOK, blocks)
 }
 
+// SaveBlock — сохранить один блок (create или update по id)
 func SaveBlock(c *gin.Context) {
 	lessonID, err := strconv.Atoi(c.Param("lesson_id"))
 	if err != nil {
@@ -182,6 +185,59 @@ func SaveBlock(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"id": blockID, "message": "Блок сохранён"})
+}
+
+// SaveBlocks — заменить ВСЕ блоки урока разом (удалить старые, вставить новые).
+// POST /teacher/lessons/:lesson_id/blocks/replace
+// Body: [ { type, ord, is_ib, content } ... ]
+func SaveBlocks(c *gin.Context) {
+	lessonID, err := strconv.Atoi(c.Param("lesson_id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный ID урока"})
+		return
+	}
+
+	var blocks []struct {
+		Type    string `json:"type"`
+		Ord     int    `json:"ord"`
+		IsIb    bool   `json:"is_ib"`
+		Content string `json:"content"`
+	}
+	if err := c.ShouldBindJSON(&blocks); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Удаляем все старые блоки урока
+	_, err = db.DB.Exec("DELETE FROM lesson_blocks WHERE lesson_id=$1", lessonID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка очистки блоков"})
+		return
+	}
+
+	// Вставляем новые
+	var savedIDs []int
+	for i, b := range blocks {
+		if b.Content == "" {
+			b.Content = "{}"
+		}
+		var newID int
+		err = db.DB.QueryRow(`
+			INSERT INTO lesson_blocks (lesson_id, type, ord, is_ib, content)
+			VALUES ($1, $2, $3, $4, $5::jsonb)
+			RETURNING id
+		`, lessonID, b.Type, i, b.IsIb, b.Content).Scan(&newID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка вставки блока"})
+			return
+		}
+		savedIDs = append(savedIDs, newID)
+	}
+
+	if savedIDs == nil {
+		savedIDs = []int{}
+	}
+	c.JSON(http.StatusOK, gin.H{"ids": savedIDs, "count": len(savedIDs)})
 }
 
 func DeleteBlock(c *gin.Context) {
