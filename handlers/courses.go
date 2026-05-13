@@ -211,6 +211,34 @@ func UpdateCourse(c *gin.Context) {
 	c.JSON(http.StatusOK, course)
 }
 
+func DeleteCourse(c *gin.Context) {
+	courseID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный ID курса"})
+		return
+	}
+	authorID, _ := c.Get("user_id")
+
+	// Каскадное удаление вручную (на случай если нет ON DELETE CASCADE)
+	db.DB.Exec("DELETE FROM course_tags WHERE course_id=$1", courseID)
+	db.DB.Exec(`
+		DELETE FROM lesson_blocks
+		WHERE lesson_id IN (SELECT id FROM lessons WHERE course_id=$1)
+	`, courseID)
+	db.DB.Exec("DELETE FROM lessons WHERE course_id=$1", courseID)
+	db.DB.Exec("DELETE FROM course_enrollments WHERE course_id=$1", courseID)
+
+	_, err = db.DB.Exec(
+		"DELETE FROM courses WHERE id=$1 AND author_id=$2",
+		courseID, authorID,
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка удаления курса"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Курс удалён"})
+}
+
 // saveTags — сохранить теги курса через course_tags
 func saveTags(courseID int, tags []string) {
 	for _, tagName := range tags {

@@ -84,6 +84,7 @@ func main() {
 			teacher.GET("/courses", handlers.GetMyCourses)
 			teacher.POST("/courses", handlers.CreateCourse)
 			teacher.PUT("/courses/:id", handlers.UpdateCourse)
+			teacher.DELETE("/courses/:id", handlers.DeleteCourse)
 
 			teacher.GET("/courses/:course_id/stats", handlers.GetCourseStats)
 
